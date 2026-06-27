@@ -1,0 +1,35 @@
+# 单机用 docker 直接跑 k8smanage（不进 k8s，连本机 k3s）—— 最省事的部署方式。
+#
+# 用法（在仓库根目录）：
+#   K8SM_AUTH_PASS='你的密码' docker compose up -d --build
+#   浏览器打开 http://<服务器IP>:8080 ，用 admin / 你的密码 登录
+#
+# 仅适用于 Linux 主机（用 network_mode: host 直连本机 k3s 的 127.0.0.1:6443）。
+# Docker Desktop(Win/Mac) 的 host 网络语义不同，仅供本机调试。
+services:
+  k8smanage:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: k8smanage:latest
+    container_name: k8smanage
+    network_mode: host # 直连 127.0.0.1:6443 的 k3s；服务 :8080 暴露在主机
+    restart: unless-stopped
+    environment:
+      KUBECONFIG: /kubeconfig
+      NODE_NAME: ${NODE_NAME:-} # 留空回落主机名（k3s 节点名通常即主机名）
+      K8SM_DB_PATH: /data/k8smanage.db
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      K8SM_HOST_ROOT: /host/root
+      K8SM_AUTH_USER: ${K8SM_AUTH_USER:-admin}
+      K8SM_AUTH_PASS: ${K8SM_AUTH_PASS:?请先设置环境变量 K8SM_AUTH_PASS 作为登录密码}
+      K8SM_SESSION_SECRET: ${K8SM_SESSION_SECRET:-} # 设了重启不掉登录态
+      K8SM_RETENTION_SEC: ${K8SM_RETENTION_SEC:-604800} # 数据保留秒数，默认 7 天
+      # K8SM_BASE_PATH: /k8smanage   # 域名子路径反代时启用（用 https://域名/k8smanage/ 访问）
+    volumes:
+      - /etc/rancher/k3s/k3s.yaml:/kubeconfig:ro # k3s kubeconfig（只读）
+      - ./data:/data # SQLite 持久化（落在仓库目录下 data/）
+      - /proc:/host/proc:ro # 宿主指标（CPU/内存/网络）
+      - /sys:/host/sys:ro
+      - /:/host/root:ro # 宿主磁盘用量

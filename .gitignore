@@ -1,0 +1,17 @@
+# 构建产物
+/server
+/server.exe
+*.exe
+
+# 运行时数据（SQLite 及 WAL 边车）
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# 前端依赖与产物（dist 由构建生成；仅保留占位 index.html 供 embed）
+/web/node_modules/
+
+# 临时与日志
+*.log
+/tmpverify/

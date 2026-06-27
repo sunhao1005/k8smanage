@@ -1,0 +1,35 @@
+{
+  "_comment": "ai-kit [code profile] Codex CLI hooks。PreToolUse 守卫(按 policy.json 三档,默认 grey 只警告;Codex 不支持 ask 故纯 warn/deny)；PostToolUse: scan-output 扫提示注入(默认开,只告警)、postfmt 自动格式化(默认关,AI_KIT_AUTOFORMAT=1 开)；SessionStart 维护提醒。脚本与 .claude/settings.json 共用 .agents/hooks/*。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/guard-destructive.mjs", "timeout": 15 },
+          { "type": "command", "command": "node .agents/hooks/guard-credentials.mjs", "timeout": 15 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Read|WebFetch)$",
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/scan-output.mjs", "timeout": 15 }
+        ]
+      },
+      {
+        "matcher": "^(Edit|Write|MultiEdit)$",
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/postfmt.mjs", "timeout": 30 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/maintenance-reminder.mjs", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

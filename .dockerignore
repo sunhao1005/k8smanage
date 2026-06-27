@@ -1,0 +1,10 @@
+.git
+.agents
+docs
+*.md
+web/node_modules
+web/dist
+*.db
+*.db-wal
+*.db-shm
+.ai-kit-backup-*

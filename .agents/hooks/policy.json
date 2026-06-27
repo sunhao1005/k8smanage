@@ -1,0 +1,14 @@
+{
+  "_comment": "ai-kit hook 策略。enforceLevel: grey(全警告,默认) | normal(critical+high 拦,medium 警) | strict(全拦)。interactive=true 仅 Claude 下用,启用 ask 询问档。可被环境变量覆盖: AI_KIT_HOOK_ENFORCE=grey|normal|strict, AI_KIT_INTERACTIVE=1。",
+  "enforceLevel": "grey",
+  "interactive": false,
+  "map": {
+    "grey":   { "critical": "warn", "high": "warn", "medium": "warn" },
+    "normal": { "critical": "deny", "high": "deny", "medium": "warn" },
+    "strict": { "critical": "deny", "high": "deny", "medium": "deny" }
+  },
+  "interactiveMap": {
+    "normal": { "critical": "deny", "high": "ask",  "medium": "warn" },
+    "strict": { "critical": "deny", "high": "deny", "medium": "ask"  }
+  }
+}

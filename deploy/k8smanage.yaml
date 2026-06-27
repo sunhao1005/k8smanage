@@ -1,0 +1,148 @@
+# k8smanage 一键部署清单：ServiceAccount + 最小 RBAC + Deployment + Service。
+# 用法：kubectl apply -f deploy/k8smanage.yaml
+# 鉴权：先建 Secret 配置登录账号密码（强烈建议）：
+#   kubectl -n kube-system create secret generic k8smanage-auth \
+#     --from-literal=user=admin \
+#     --from-literal=pass='你的密码' \
+#     --from-literal=session-secret=$(openssl rand -hex 16)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8smanage
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8smanage
+rules:
+  # 只读对象（informer 缓存 + 列表）
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "events", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "update", "patch"] # 扩缩/重启走 update
+  # 管理操作
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # 读 metrics-server
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8smanage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8smanage
+subjects:
+  - kind: ServiceAccount
+    name: k8smanage
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8smanage
+  namespace: kube-system
+  labels: { app: k8smanage }
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # 单实例 + hostPath，避免两实例争用数据
+  selector:
+    matchLabels: { app: k8smanage }
+  template:
+    metadata:
+      labels: { app: k8smanage }
+    spec:
+      serviceAccountName: k8smanage
+      # 注意：单进程只能读本机 /proc，多节点请改用 DaemonSet agent（见 README）。
+      securityContext:
+        runAsUser: 0 # 读宿主 /proc 与写 hostPath；不开 hostPID（评审 N4）
+      containers:
+        - name: k8smanage
+          image: k8smanage:latest # 改成你的镜像仓库地址
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: { fieldPath: spec.nodeName }
+            - name: HOST_PROC
+              value: /host/proc
+            - name: HOST_SYS
+              value: /host/sys
+            - name: K8SM_HOST_ROOT
+              value: /host/root
+            - name: K8SM_DB_PATH
+              value: /data/k8smanage.db
+            # 账号密码登录（推荐，自用）：
+            - name: K8SM_AUTH_USER
+              valueFrom: { secretKeyRef: { name: k8smanage-auth, key: user, optional: true } }
+            - name: K8SM_AUTH_PASS
+              valueFrom: { secretKeyRef: { name: k8smanage-auth, key: pass, optional: true } }
+            # 会话签名密钥（设了则重启不掉登录态）：
+            - name: K8SM_SESSION_SECRET
+              valueFrom: { secretKeyRef: { name: k8smanage-auth, key: session-secret, optional: true } }
+            # 可选：给脚本用的静态 API Token：
+            - name: K8SM_AUTH_TOKEN
+              valueFrom: { secretKeyRef: { name: k8smanage-auth, key: token, optional: true } }
+            # 三者都不设则无鉴权（启动会告警）。
+            # 域名子路径反代（用 https://域名/k8smanage/ 访问时取消注释）：
+            # - name: K8SM_BASE_PATH
+            #   value: /k8smanage
+            # - name: K8SM_ALERT_WEBHOOK
+            #   value: "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: host-proc, mountPath: /host/proc, readOnly: true }
+            - { name: host-sys, mountPath: /host/sys, readOnly: true }
+            - { name: host-root, mountPath: /host/root, readOnly: true }
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: host-proc, hostPath: { path: /proc } }
+        - { name: host-sys, hostPath: { path: /sys } }
+        - { name: host-root, hostPath: { path: / } }
+        - name: data
+          hostPath: { path: /var/lib/k8smanage, type: DirectoryOrCreate } # SQLite 持久化（评审 N3）
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8smanage
+  namespace: kube-system
+spec:
+  type: ClusterIP # 默认不外暴露；用 kubectl port-forward 或自配 Ingress（务必配合 token）
+  selector: { app: k8smanage }
+  ports:
+    - port: 80
+      targetPort: 8080

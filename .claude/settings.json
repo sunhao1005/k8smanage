@@ -1,0 +1,35 @@
+{
+  "$comment": "ai-kit [code profile] Claude Code hooks。PreToolUse 守卫(按 policy.json 三档,默认 grey 只警告)；PostToolUse: scan-output 扫提示注入(默认开,只告警)、postfmt 自动格式化(默认关,AI_KIT_AUTOFORMAT=1 开)；SessionStart 维护提醒(隔 AI_KIT_MAINT_DAYS 天)。脚本与 .codex/hooks.json 共用 .agents/hooks/*。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/guard-destructive.mjs" },
+          { "type": "command", "command": "node .agents/hooks/guard-credentials.mjs" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|WebFetch",
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/scan-output.mjs" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/postfmt.mjs" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node .agents/hooks/maintenance-reminder.mjs" }
+        ]
+      }
+    ]
+  }
+}
