@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
 import { API, Workload, Unauthorized } from '../api'
+import Modal, { ModalActions } from '../components/Modal'
+
+type Dialog =
+  | { kind: 'scale'; w: Workload }
+  | { kind: 'pause'; w: Workload }
+  | null
 
 export default function Workloads({ onAuthError }: { onAuthError: () => void }) {
   const [wls, setWls] = useState<Workload[]>([])
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
+  const [dialog, setDialog] = useState<Dialog>(null)
+  const [scaleVal, setScaleVal] = useState(0)
 
   async function load() {
     try {
@@ -15,13 +23,22 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
       setErr(e.message)
     }
   }
-  useEffect(() => { load() }, [])
+  // 自动刷新：消除写操作后 informer 缓存的短暂延迟，并让就绪数实时更新。
+  useEffect(() => {
+    load()
+    const id = setInterval(load, 5000)
+    return () => clearInterval(id)
+  }, [])
 
-  async function act(fn: () => Promise<any>, ok: string) {
+  function flash(s: string) {
+    setMsg(s)
+    setTimeout(() => setMsg(''), 2500)
+  }
+
+  async function run(fn: () => Promise<any>, ok: string) {
     try {
       await fn()
-      setMsg(ok)
-      setTimeout(() => setMsg(''), 2500)
+      flash(ok)
       load()
     } catch (e: any) {
       if (e instanceof Unauthorized) return onAuthError()
@@ -29,12 +46,9 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
     }
   }
 
-  function scale(w: Workload) {
-    const v = prompt(`将 ${w.name} 扩缩到几个副本？`, String(w.desired))
-    if (v == null) return
-    const n = parseInt(v, 10)
-    if (isNaN(n) || n < 0) { setErr('副本数非法'); return }
-    act(() => API.scale(w.namespace, w.kind, w.name, n), `已扩缩 ${w.name} → ${n}`)
+  function openScale(w: Workload) {
+    setScaleVal(w.desired)
+    setDialog({ kind: 'scale', w })
   }
 
   const canScale = (k: string) => k === 'Deployment' || k === 'StatefulSet'
@@ -49,7 +63,7 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
       </div>
       <table>
         <thead>
-          <tr><th>命名空间</th><th>类型</th><th>名称</th><th>就绪</th><th>操作</th></tr>
+          <tr><th>命名空间</th><th>类型</th><th>名称</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
           {wls.map((w) => {
@@ -59,10 +73,17 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
                 <td>{w.namespace}</td>
                 <td>{w.kind}</td>
                 <td>{w.name}</td>
-                <td><span className={`badge ${ready ? 'ok' : 'warn'}`}>{w.ready}/{w.desired}</span></td>
                 <td>
-                  {canScale(w.kind) && <button className="btn" onClick={() => scale(w)}>扩缩</button>}
-                  <button className="btn" onClick={() => act(() => API.restart(w.namespace, w.kind, w.name), `已重启 ${w.name}`)}>重启</button>
+                  {w.paused
+                    ? <span className="badge warn">已暂停</span>
+                    : <span className={`badge ${ready ? 'ok' : 'warn'}`}>{w.ready}/{w.desired}</span>}
+                </td>
+                <td>
+                  {canScale(w.kind) && <button className="btn" onClick={() => openScale(w)}>扩缩</button>}
+                  <button className="btn" onClick={() => run(() => API.restart(w.namespace, w.kind, w.name), `已重启 ${w.name}`)}>重启</button>
+                  {w.pausable && (w.paused
+                    ? <button className="btn primary" onClick={() => run(() => API.resume(w.namespace, w.kind, w.name), `已启用 ${w.name}`)}>启用</button>
+                    : <button className="btn" onClick={() => setDialog({ kind: 'pause', w })}>暂停</button>)}
                 </td>
               </tr>
             )
@@ -70,6 +91,47 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
           {wls.length === 0 && <tr><td colSpan={5} style={{ color: 'var(--muted)' }}>无工作负载（或未连接集群）</td></tr>}
         </tbody>
       </table>
+
+      {dialog?.kind === 'scale' && (
+        <Modal title={`扩缩 ${dialog.w.name}`} onClose={() => setDialog(null)}>
+          <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 10 }}>
+            {dialog.w.kind} · 当前 {dialog.w.desired} 副本
+          </div>
+          <div className="stepper">
+            <button className="btn" onClick={() => setScaleVal((v) => Math.max(0, v - 1))}>−</button>
+            <input
+              type="number" min={0} value={scaleVal}
+              onChange={(e) => setScaleVal(Math.max(0, parseInt(e.target.value, 10) || 0))}
+            />
+            <button className="btn" onClick={() => setScaleVal((v) => v + 1)}>+</button>
+            <span style={{ color: 'var(--muted)', fontSize: 12 }}>副本</span>
+          </div>
+          <ModalActions>
+            <button className="btn" onClick={() => setDialog(null)}>取消</button>
+            <button className="btn primary" onClick={() => {
+              const w = dialog.w
+              setDialog(null)
+              run(() => API.scale(w.namespace, w.kind, w.name, scaleVal), `已扩缩 ${w.name} → ${scaleVal}`)
+            }}>确定</button>
+          </ModalActions>
+        </Modal>
+      )}
+
+      {dialog?.kind === 'pause' && (
+        <Modal title={`暂停 ${dialog.w.name}？`} onClose={() => setDialog(null)}>
+          <div style={{ marginBottom: 14 }}>
+            将把副本缩到 0，<b>Pod 会被移除</b>、释放资源。原副本数（{dialog.w.desired}）会被记住，点「启用」即可恢复。
+          </div>
+          <ModalActions>
+            <button className="btn" onClick={() => setDialog(null)}>取消</button>
+            <button className="btn danger" onClick={() => {
+              const w = dialog.w
+              setDialog(null)
+              run(() => API.pause(w.namespace, w.kind, w.name), `已暂停 ${w.name}`)
+            }}>确定暂停</button>
+          </ModalActions>
+        </Modal>
+      )}
     </div>
   )
 }

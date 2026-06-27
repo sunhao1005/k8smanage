@@ -78,6 +78,11 @@ select, input { padding: 6px 8px; border: 1px solid var(--border); border-radius
 .modal { background: #fff; border-radius: 10px; padding: 24px; width: 360px; }
 .modal h2 { margin: 0 0 12px; font-size: 16px; }
 .modal input { width: 100%; margin: 8px 0 16px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.modal-actions .btn { margin-right: 0; }
+.stepper { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; }
+.stepper input { width: 90px; margin: 0; text-align: center; }
+.stepper .btn { margin-right: 0; padding: 5px 12px; font-size: 16px; line-height: 1; }
 .err { color: var(--bad); font-size: 13px; margin: 8px 0; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

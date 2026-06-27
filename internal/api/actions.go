@@ -43,6 +43,34 @@ func (s *server) handleRestart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+func (s *server) handlePause(w http.ResponseWriter, r *http.Request) {
+	if s.d.Actions == nil {
+		writeErr(w, http.StatusServiceUnavailable, "未连接集群")
+		return
+	}
+	ns, kind, name := chi.URLParam(r, "ns"), chi.URLParam(r, "kind"), chi.URLParam(r, "name")
+	if err := s.d.Actions.Pause(r.Context(), ns, kind, name); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	slog.Info("暂停", "ns", ns, "kind", kind, "name", name)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *server) handleResume(w http.ResponseWriter, r *http.Request) {
+	if s.d.Actions == nil {
+		writeErr(w, http.StatusServiceUnavailable, "未连接集群")
+		return
+	}
+	ns, kind, name := chi.URLParam(r, "ns"), chi.URLParam(r, "kind"), chi.URLParam(r, "name")
+	if err := s.d.Actions.Resume(r.Context(), ns, kind, name); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	slog.Info("启用", "ns", ns, "kind", kind, "name", name)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (s *server) handleDeletePod(w http.ResponseWriter, r *http.Request) {
 	if s.d.Actions == nil {
 		writeErr(w, http.StatusServiceUnavailable, "未连接集群")

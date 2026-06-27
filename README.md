@@ -6,12 +6,12 @@
 
 > 状态：**M1–M5 全部完成，已在真 k3s（单节点 Docker `rancher/k3s`）上端到端验证**。完整计划见 [docs/superpowers/plans/2026-06-27-k8smanage.md](docs/superpowers/plans/2026-06-27-k8smanage.md)。
 >
-> 公开镜像：**`docker pull 17719317036/k8smanage:v0.2.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)）
+> 公开镜像：**`docker pull 17719317036/k8smanage:v0.3.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)）
 
 ## 功能一览
 
 - **监控**：节点 CPU/内存/磁盘/网络/负载 + Pod CPU/内存，历史曲线（环形存储），Web 控制台总览大盘。
-- **管理**：工作负载扩缩容、滚动重启、删 Pod，实时日志流，浏览器内容器终端（TTY）。
+- **管理**：工作负载扩缩容、滚动重启、**暂停/启用**（缩到 0 / 恢复原副本数）、删 Pod，实时日志流，浏览器内容器终端（TTY）。
 - **告警**：阈值规则（持续时长、匹配单个或全部目标）、状态机（pending→firing→恢复）、webhook 通知（飞书/钉钉/通用 JSON）。
 - **控制台**：自建 React SPA（总览 / 工作负载 / 日志 / 终端 / 告警），embed 进同一个二进制。
 - **部署**：单个 distroless 镜像（约 12.7MB）+ 一条 `kubectl apply`。
@@ -85,7 +85,7 @@ docker build -f deploy/Dockerfile -t k8smanage:latest .
 ```
 
 > 也可直接用已发布的预构建镜像（无需自己构建）：
-> **`docker pull 17719317036/k8smanage:v0.2.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)，公开）。
+> **`docker pull 17719317036/k8smanage:v0.3.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)，公开）。
 
 ## 本地运行
 
@@ -107,7 +107,7 @@ KUBECONFIG=/path/to/k3s.yaml K8SM_DB_PATH=./k8sm.db go run ./cmd/server
 ```bash
 # 1) 准备镜像，二选一：
 #  a) 直接用已发布的公开镜像（推荐，最省事）：
-#     把 deploy/k8smanage.yaml 里的 image 改成 17719317036/k8smanage:v0.2.0 即可，k3s 会自动拉取
+#     把 deploy/k8smanage.yaml 里的 image 改成 17719317036/k8smanage:v0.3.0 即可，k3s 会自动拉取
 #  b) 或本地构建并导入 k3s（无镜像仓库时）：
 docker build -f deploy/Dockerfile -t k8smanage:latest .
 docker save k8smanage:latest | sudo k3s ctr images import -
@@ -137,7 +137,7 @@ K8SM_AUTH_PASS='你的密码' docker compose up -d --build
 # 浏览器打开 http://<服务器IP>:8080 ，用 admin / 你的密码 登录
 ```
 
-> 想跳过本地构建，把 [docker-compose.yml](docker-compose.yml) 里的 `build:` 删掉、`image:` 改成 `17719317036/k8smanage:v0.2.0`，直接拉公开镜像跑。
+> 想跳过本地构建，把 [docker-compose.yml](docker-compose.yml) 里的 `build:` 删掉、`image:` 改成 `17719317036/k8smanage:v0.3.0`，直接拉公开镜像跑。
 
 [docker-compose.yml](docker-compose.yml) 用 `network_mode: host` 直连本机 k3s 的 `127.0.0.1:6443`，挂 `/etc/rancher/k3s/k3s.yaml` 作 kubeconfig、挂宿主 `/proc`·`/sys`·`/` 采集指标、SQLite 落到 `./data/`。仅适用于 Linux 主机。
 
@@ -210,6 +210,8 @@ spec:
 | GET | `/api/metrics/query?kind=&target=&metric=&from=&to=&step=` | 时序点；`metric ∈ {cpu,mem,disk,net_rx,net_tx,load1}`（`net_rx`/`net_tx` 返回**速率 字节/秒**，已从累计计数器换算并处理重置），时间为 unix 秒、可省（默认近 1 小时）；区间过长时**自动按桶降采样**（≤500 点），可用 `step`（秒）显式指定桶大小 |
 | POST | `/api/workloads/{ns}/{kind}/{name}/scale` | 扩缩容，body `{"replicas":N}` |
 | POST | `/api/workloads/{ns}/{kind}/{name}/restart` | 滚动重启（等价 rollout restart） |
+| POST | `/api/workloads/{ns}/{kind}/{name}/pause` | 暂停：记下原副本数到注解并缩到 0（仅 Deployment/StatefulSet） |
+| POST | `/api/workloads/{ns}/{kind}/{name}/resume` | 启用：从注解恢复原副本数（缺省 1） |
 | DELETE | `/api/pods/{ns}/{name}` | 删除 Pod（由控制器重建） |
 | GET(WS) | `/api/logs?ns=&pod=&container=&follow=1` | 流式 Pod 日志 |
 | GET(WS) | `/api/exec?ns=&pod=&container=&shell=/bin/sh` | 容器内终端（TTY，支持 resize） |

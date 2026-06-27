@@ -39,7 +39,10 @@ export interface Overview {
   nodes: NodeOverview[]
   workloads: { total: number; ready: number }
 }
-export interface Workload { namespace: string; kind: string; name: string; desired: number; ready: number }
+export interface Workload {
+  namespace: string; kind: string; name: string; desired: number; ready: number
+  pausable: boolean; paused: boolean
+}
 export interface Pod { namespace: string; name: string; phase: string; node: string; ready: boolean; containers: string[] }
 export interface Point { TS: string; Value: number }
 export interface Rule {
@@ -66,6 +69,8 @@ export const API = {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replicas }),
     }),
   restart: (ns: string, kind: string, name: string) => req(`/workloads/${ns}/${kind}/${name}/restart`, { method: 'POST' }),
+  pause: (ns: string, kind: string, name: string) => req(`/workloads/${ns}/${kind}/${name}/pause`, { method: 'POST' }),
+  resume: (ns: string, kind: string, name: string) => req(`/workloads/${ns}/${kind}/${name}/resume`, { method: 'POST' }),
   delPod: (ns: string, name: string) => req(`/pods/${ns}/${name}`, { method: 'DELETE' }),
   rules: (): Promise<Rule[]> => req('/alerts/rules'),
   saveRule: (r: Rule): Promise<Rule> =>

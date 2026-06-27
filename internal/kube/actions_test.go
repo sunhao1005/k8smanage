@@ -30,6 +30,40 @@ func TestActionsScale(t *testing.T) {
 	require.Error(t, a.Scale(ctx, "default", "Deployment", "web", -1))
 }
 
+func TestActionsPauseResume(t *testing.T) {
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec:       appsv1.DeploymentSpec{Replicas: ptr(3)},
+	}
+	cs := fake.NewSimpleClientset(dep)
+	a := NewActions(cs)
+	ctx := context.Background()
+
+	// 暂停：记下副本数 3 到注解，缩到 0
+	require.NoError(t, a.Pause(ctx, "default", "Deployment", "web"))
+	got, _ := cs.AppsV1().Deployments("default").Get(ctx, "web", metav1.GetOptions{})
+	require.Equal(t, int32(0), *got.Spec.Replicas)
+	require.Equal(t, "3", got.Annotations[pausedReplicasAnnotation])
+
+	// 启用：从注解恢复到 3，清除注解
+	require.NoError(t, a.Resume(ctx, "default", "Deployment", "web"))
+	got, _ = cs.AppsV1().Deployments("default").Get(ctx, "web", metav1.GetOptions{})
+	require.Equal(t, int32(3), *got.Spec.Replicas)
+	require.NotContains(t, got.Annotations, pausedReplicasAnnotation)
+}
+
+func TestActionsResumeWithoutAnnotationDefaultsToOne(t *testing.T) {
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec:       appsv1.DeploymentSpec{Replicas: ptr(0)},
+	}
+	cs := fake.NewSimpleClientset(dep)
+	a := NewActions(cs)
+	require.NoError(t, a.Resume(context.Background(), "default", "Deployment", "web"))
+	got, _ := cs.AppsV1().Deployments("default").Get(context.Background(), "web", metav1.GetOptions{})
+	require.Equal(t, int32(1), *got.Spec.Replicas)
+}
+
 func TestActionsRestart(t *testing.T) {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},

@@ -25,6 +25,8 @@ type WorkloadInfo struct {
 	Name      string `json:"name"`
 	Desired   int32  `json:"desired"`
 	Ready     int32  `json:"ready"`
+	Pausable  bool   `json:"pausable"` // 是否支持暂停/启用（Deployment/StatefulSet）
+	Paused    bool   `json:"paused"`   // 当前是否已暂停（副本=0）
 }
 
 // PodInfo 是 Pod 的页面投影。
@@ -77,7 +79,12 @@ func (l *Lister) Workloads(ctx context.Context, ns string) ([]WorkloadInfo, erro
 	}
 	for i := range deps.Items {
 		d := &deps.Items[i]
-		out = append(out, WorkloadInfo{d.Namespace, "Deployment", d.Name, replicas(d.Spec.Replicas), d.Status.ReadyReplicas})
+		desired := replicas(d.Spec.Replicas)
+		out = append(out, WorkloadInfo{
+			Namespace: d.Namespace, Kind: "Deployment", Name: d.Name,
+			Desired: desired, Ready: d.Status.ReadyReplicas,
+			Pausable: true, Paused: desired == 0,
+		})
 	}
 
 	var sts appsv1.StatefulSetList
@@ -86,7 +93,12 @@ func (l *Lister) Workloads(ctx context.Context, ns string) ([]WorkloadInfo, erro
 	}
 	for i := range sts.Items {
 		s := &sts.Items[i]
-		out = append(out, WorkloadInfo{s.Namespace, "StatefulSet", s.Name, replicas(s.Spec.Replicas), s.Status.ReadyReplicas})
+		desired := replicas(s.Spec.Replicas)
+		out = append(out, WorkloadInfo{
+			Namespace: s.Namespace, Kind: "StatefulSet", Name: s.Name,
+			Desired: desired, Ready: s.Status.ReadyReplicas,
+			Pausable: true, Paused: desired == 0,
+		})
 	}
 
 	var ds appsv1.DaemonSetList
@@ -95,7 +107,10 @@ func (l *Lister) Workloads(ctx context.Context, ns string) ([]WorkloadInfo, erro
 	}
 	for i := range ds.Items {
 		d := &ds.Items[i]
-		out = append(out, WorkloadInfo{d.Namespace, "DaemonSet", d.Name, d.Status.DesiredNumberScheduled, d.Status.NumberReady})
+		out = append(out, WorkloadInfo{
+			Namespace: d.Namespace, Kind: "DaemonSet", Name: d.Name,
+			Desired: d.Status.DesiredNumberScheduled, Ready: d.Status.NumberReady,
+		})
 	}
 
 	sort.Slice(out, func(i, j int) bool {

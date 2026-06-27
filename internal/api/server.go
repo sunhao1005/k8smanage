@@ -26,6 +26,8 @@ type Lister interface {
 type Actions interface {
 	Scale(ctx context.Context, ns, kind, name string, replicas int32) error
 	Restart(ctx context.Context, ns, kind, name string) error
+	Pause(ctx context.Context, ns, kind, name string) error
+	Resume(ctx context.Context, ns, kind, name string) error
 	DeletePod(ctx context.Context, ns, name string) error
 }
 
@@ -104,6 +106,8 @@ func newAppRouter(d Deps, base string) http.Handler {
 			// 写操作（M3）
 			r.Post("/workloads/{ns}/{kind}/{name}/scale", s.handleScale)
 			r.Post("/workloads/{ns}/{kind}/{name}/restart", s.handleRestart)
+			r.Post("/workloads/{ns}/{kind}/{name}/pause", s.handlePause)
+			r.Post("/workloads/{ns}/{kind}/{name}/resume", s.handleResume)
 			r.Delete("/pods/{ns}/{name}", s.handleDeletePod)
 
 			// 流式（M3）
