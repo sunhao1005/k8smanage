@@ -4,9 +4,11 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -16,6 +18,7 @@ type NodeInfo struct {
 	Ready          bool     `json:"ready"`
 	Roles          []string `json:"roles"`
 	KubeletVersion string   `json:"kubeletVersion"`
+	CPUCores       float64  `json:"cpuCores"` // 节点总逻辑核数（来自 Node capacity），用于算 CPU 占用率
 }
 
 // WorkloadInfo 是工作负载（Deployment/StatefulSet/DaemonSet）的页面投影。
@@ -25,8 +28,10 @@ type WorkloadInfo struct {
 	Name      string `json:"name"`
 	Desired   int32  `json:"desired"`
 	Ready     int32  `json:"ready"`
-	Pausable  bool   `json:"pausable"` // 是否支持暂停/启用（Deployment/StatefulSet）
-	Paused    bool   `json:"paused"`   // 当前是否已暂停（副本=0）
+	Pausable  bool   `json:"pausable"`  // 是否支持暂停/启用（Deployment/StatefulSet）
+	Paused    bool   `json:"paused"`    // 当前是否已暂停（副本=0）
+	Image     string `json:"image"`     // 首个容器镜像
+	CreatedAt string `json:"createdAt"` // 创建时间（RFC3339），前端算运行时长
 }
 
 // PodInfo 是 Pod 的页面投影。
@@ -59,6 +64,7 @@ func (l *Lister) Nodes(ctx context.Context) ([]NodeInfo, error) {
 			Ready:          nodeReady(n),
 			Roles:          nodeRoles(n),
 			KubeletVersion: n.Status.NodeInfo.KubeletVersion,
+			CPUCores:       n.Status.Capacity.Cpu().AsApproximateFloat64(),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -84,6 +90,7 @@ func (l *Lister) Workloads(ctx context.Context, ns string) ([]WorkloadInfo, erro
 			Namespace: d.Namespace, Kind: "Deployment", Name: d.Name,
 			Desired: desired, Ready: d.Status.ReadyReplicas,
 			Pausable: true, Paused: desired == 0,
+			Image: firstImage(d.Spec.Template.Spec.Containers), CreatedAt: createdAt(d.CreationTimestamp),
 		})
 	}
 
@@ -98,6 +105,7 @@ func (l *Lister) Workloads(ctx context.Context, ns string) ([]WorkloadInfo, erro
 			Namespace: s.Namespace, Kind: "StatefulSet", Name: s.Name,
 			Desired: desired, Ready: s.Status.ReadyReplicas,
 			Pausable: true, Paused: desired == 0,
+			Image: firstImage(s.Spec.Template.Spec.Containers), CreatedAt: createdAt(s.CreationTimestamp),
 		})
 	}
 
@@ -110,6 +118,7 @@ func (l *Lister) Workloads(ctx context.Context, ns string) ([]WorkloadInfo, erro
 		out = append(out, WorkloadInfo{
 			Namespace: d.Namespace, Kind: "DaemonSet", Name: d.Name,
 			Desired: d.Status.DesiredNumberScheduled, Ready: d.Status.NumberReady,
+			Image: firstImage(d.Spec.Template.Spec.Containers), CreatedAt: createdAt(d.CreationTimestamp),
 		})
 	}
 
@@ -194,4 +203,18 @@ func replicas(p *int32) int32 {
 		return 1
 	}
 	return *p
+}
+
+func firstImage(cs []corev1.Container) string {
+	if len(cs) > 0 {
+		return cs[0].Image
+	}
+	return ""
+}
+
+func createdAt(t metav1.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }

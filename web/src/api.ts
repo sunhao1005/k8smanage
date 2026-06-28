@@ -32,7 +32,7 @@ async function req(path: string, opts: RequestInit = {}): Promise<any> {
 }
 
 export interface NodeOverview {
-  name: string; ready: boolean; roles: string[]; kubeletVersion: string
+  name: string; ready: boolean; roles: string[]; kubeletVersion: string; cpuCores: number
   cpu: number; memUse: number; memTot: number; diskUse: number; diskTot: number; load1: number; hasData: boolean
 }
 export interface Overview {
@@ -41,7 +41,7 @@ export interface Overview {
 }
 export interface Workload {
   namespace: string; kind: string; name: string; desired: number; ready: number
-  pausable: boolean; paused: boolean
+  pausable: boolean; paused: boolean; image: string; createdAt: string
 }
 export interface Pod { namespace: string; name: string; phase: string; node: string; ready: boolean; containers: string[] }
 export interface Point { TS: string; Value: number }

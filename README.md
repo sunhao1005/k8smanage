@@ -6,7 +6,7 @@
 
 > 状态：**M1–M5 全部完成，已在真 k3s（单节点 Docker `rancher/k3s`）上端到端验证**。完整计划见 [docs/superpowers/plans/2026-06-27-k8smanage.md](docs/superpowers/plans/2026-06-27-k8smanage.md)。
 >
-> 公开镜像：**`docker pull 17719317036/k8smanage:v0.3.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)）
+> 公开镜像：**`docker pull 17719317036/k8smanage:v0.4.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)）
 
 ## 功能一览
 
@@ -85,7 +85,7 @@ docker build -f deploy/Dockerfile -t k8smanage:latest .
 ```
 
 > 也可直接用已发布的预构建镜像（无需自己构建）：
-> **`docker pull 17719317036/k8smanage:v0.3.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)，公开）。
+> **`docker pull 17719317036/k8smanage:v0.4.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)，公开）。
 
 ## 本地运行
 
@@ -107,7 +107,7 @@ KUBECONFIG=/path/to/k3s.yaml K8SM_DB_PATH=./k8sm.db go run ./cmd/server
 ```bash
 # 1) 准备镜像，二选一：
 #  a) 直接用已发布的公开镜像（推荐，最省事）：
-#     把 deploy/k8smanage.yaml 里的 image 改成 17719317036/k8smanage:v0.3.0 即可，k3s 会自动拉取
+#     把 deploy/k8smanage.yaml 里的 image 改成 17719317036/k8smanage:v0.4.0 即可，k3s 会自动拉取
 #  b) 或本地构建并导入 k3s（无镜像仓库时）：
 docker build -f deploy/Dockerfile -t k8smanage:latest .
 docker save k8smanage:latest | sudo k3s ctr images import -
@@ -137,7 +137,7 @@ K8SM_AUTH_PASS='你的密码' docker compose up -d --build
 # 浏览器打开 http://<服务器IP>:8080 ，用 admin / 你的密码 登录
 ```
 
-> 想跳过本地构建，把 [docker-compose.yml](docker-compose.yml) 里的 `build:` 删掉、`image:` 改成 `17719317036/k8smanage:v0.3.0`，直接拉公开镜像跑。
+> 想跳过本地构建，把 [docker-compose.yml](docker-compose.yml) 里的 `build:` 删掉、`image:` 改成 `17719317036/k8smanage:v0.4.0`，直接拉公开镜像跑。
 
 [docker-compose.yml](docker-compose.yml) 用 `network_mode: host` 直连本机 k3s 的 `127.0.0.1:6443`，挂 `/etc/rancher/k3s/k3s.yaml` 作 kubeconfig、挂宿主 `/proc`·`/sys`·`/` 采集指标、SQLite 落到 `./data/`。仅适用于 Linux 主机。
 

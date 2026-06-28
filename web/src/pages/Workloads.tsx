@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { API, Workload, Unauthorized } from '../api'
+import { formatAge } from '../components/UsageBar'
 import Modal, { ModalActions } from '../components/Modal'
 
 type Dialog =
@@ -13,6 +14,17 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
   const [msg, setMsg] = useState('')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [scaleVal, setScaleVal] = useState(0)
+  // 分类筛选
+  const [nsFilter, setNsFilter] = useState('')
+  const [kindFilter, setKindFilter] = useState('')
+  const [search, setSearch] = useState('')
+
+  const namespaces = useMemo(() => Array.from(new Set(wls.map((w) => w.namespace))).sort(), [wls])
+  const filtered = useMemo(() => wls.filter((w) =>
+    (!nsFilter || w.namespace === nsFilter) &&
+    (!kindFilter || w.kind === kindFilter) &&
+    (!search || w.name.includes(search) || (w.image || '').includes(search)),
+  ), [wls, nsFilter, kindFilter, search])
 
   async function load() {
     try {
@@ -59,26 +71,40 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
       {err && <div className="err">{err}</div>}
       {msg && <div style={{ color: 'var(--ok)', marginBottom: 10 }}>{msg}</div>}
       <div className="toolbar">
-        <button className="btn" onClick={load}>刷新</button>
+        <select value={nsFilter} onChange={(e) => setNsFilter(e.target.value)}>
+          <option value="">全部命名空间</option>
+          {namespaces.map((ns) => <option key={ns} value={ns}>{ns}</option>)}
+        </select>
+        <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+          <option value="">全部类型</option>
+          <option value="Deployment">Deployment</option>
+          <option value="StatefulSet">StatefulSet</option>
+          <option value="DaemonSet">DaemonSet</option>
+        </select>
+        <input placeholder="搜索名称 / 镜像" value={search} onChange={(e) => setSearch(e.target.value)} style={{ minWidth: 180 }} />
+        <span style={{ color: 'var(--muted)', fontSize: 12 }}>共 {filtered.length} / {wls.length}</span>
+        <button className="btn" onClick={load} style={{ marginLeft: 'auto' }}>刷新</button>
       </div>
       <table>
         <thead>
-          <tr><th>命名空间</th><th>类型</th><th>名称</th><th>状态</th><th>操作</th></tr>
+          <tr><th>命名空间</th><th>类型</th><th>名称</th><th>镜像</th><th>状态</th><th>运行时长</th><th>操作</th></tr>
         </thead>
         <tbody>
-          {wls.map((w) => {
+          {filtered.map((w) => {
             const ready = w.desired > 0 && w.ready === w.desired
             return (
               <tr key={`${w.namespace}/${w.kind}/${w.name}`}>
                 <td>{w.namespace}</td>
                 <td>{w.kind}</td>
                 <td>{w.name}</td>
+                <td title={w.image} className="cell-image">{w.image || '—'}</td>
                 <td>
                   {w.paused
                     ? <span className="badge warn">已暂停</span>
                     : <span className={`badge ${ready ? 'ok' : 'warn'}`}>{w.ready}/{w.desired}</span>}
                 </td>
-                <td>
+                <td>{formatAge(w.createdAt)}</td>
+                <td className="cell-actions">
                   {canScale(w.kind) && <button className="btn" onClick={() => openScale(w)}>扩缩</button>}
                   <button className="btn" onClick={() => run(() => API.restart(w.namespace, w.kind, w.name), `已重启 ${w.name}`)}>重启</button>
                   {w.pausable && (w.paused
@@ -88,7 +114,7 @@ export default function Workloads({ onAuthError }: { onAuthError: () => void }) 
               </tr>
             )
           })}
-          {wls.length === 0 && <tr><td colSpan={5} style={{ color: 'var(--muted)' }}>无工作负载（或未连接集群）</td></tr>}
+          {filtered.length === 0 && <tr><td colSpan={7} style={{ color: 'var(--muted)' }}>无匹配的工作负载</td></tr>}
         </tbody>
       </table>
 

@@ -77,10 +77,13 @@ export default function Overview({ onAuthError }: { onAuthError: () => void }) {
             <div className="sub">{n.roles.join(', ') || '—'} · {n.kubeletVersion}</div>
             {n.hasData ? (
               <>
-                <div className="bar-row"><span>CPU</span><span>{n.cpu.toFixed(2)} 核 · load {n.load1.toFixed(2)}</span></div>
-                {cpuSeries[n.name] && <Chart data={cpuSeries[n.name]} label="CPU 核" fmt={(v) => (v == null ? '-' : v.toFixed(2))} />}
+                {cpuSeries[n.name] && <Chart data={cpuSeries[n.name]} label="CPU 核" title="CPU · 近 1 小时" fmt={(v) => (v == null ? '—' : v.toFixed(2) + ' 核')} />}
+                {n.cpuCores > 0
+                  ? <UsageBar used={n.cpu} total={n.cpuCores} label="CPU" fmt={(v) => `${v.toFixed(2)} 核`} />
+                  : <div className="bar-row"><span>CPU</span><span>{n.cpu.toFixed(2)} 核</span></div>}
                 <UsageBar used={n.memUse} total={n.memTot} label="内存" />
                 <UsageBar used={n.diskUse} total={n.diskTot} label="磁盘" />
+                <div className="bar-row" style={{ marginTop: 2 }}><span>负载 (1m)</span><span>{n.load1.toFixed(2)}</span></div>
               </>
             ) : (
               <div className="sub">尚无采样数据（采集器未在该节点运行）</div>
