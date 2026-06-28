@@ -46,6 +46,9 @@ type MetricStore interface {
 	Latest(ctx context.Context, kind TargetKind, target string) (Sample, bool, error)
 	// Targets 列出某 kind 在 since 之后有样本的去重 target（告警"匹配全部"用）。
 	Targets(ctx context.Context, kind TargetKind, since time.Time) ([]string, error)
+	// TrafficTotal 统计某 target 在 [from,to] 内累计消耗的网络流量（字节）：
+	// 对 net_rx/net_tx 计数器的正增量求和（处理计数器重启）。rx=下行，tx=上行。
+	TrafficTotal(ctx context.Context, kind TargetKind, target string, from, to time.Time) (rx, tx uint64, err error)
 	// Prune 删除早于 cutoff 的样本（环形保留）。
 	Prune(ctx context.Context, cutoff time.Time) (int64, error)
 	Close() error

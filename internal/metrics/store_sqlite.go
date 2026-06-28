@@ -202,6 +202,26 @@ func (s *sqliteStore) Targets(ctx context.Context, kind TargetKind, since time.T
 	return out, rows.Err()
 }
 
+func (s *sqliteStore) TrafficTotal(ctx context.Context, kind TargetKind, target string, from, to time.Time) (uint64, uint64, error) {
+	// 用窗口函数取相邻样本的计数器增量，只累加正增量（计数器重启时增量为负，记 0）。
+	const q = `
+SELECT COALESCE(SUM(CASE WHEN drx > 0 THEN drx ELSE 0 END), 0),
+       COALESCE(SUM(CASE WHEN dtx > 0 THEN dtx ELSE 0 END), 0)
+FROM (
+  SELECT net_rx - LAG(net_rx) OVER w AS drx,
+         net_tx - LAG(net_tx) OVER w AS dtx
+  FROM samples
+  WHERE kind=? AND target=? AND ts BETWEEN ? AND ?
+  WINDOW w AS (ORDER BY ts)
+)`
+	var rx, tx int64
+	err := s.db.QueryRowContext(ctx, q, string(kind), target, from.Unix(), to.Unix()).Scan(&rx, &tx)
+	if err != nil {
+		return 0, 0, err
+	}
+	return uint64(rx), uint64(tx), nil
+}
+
 func (s *sqliteStore) Prune(ctx context.Context, cutoff time.Time) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM samples WHERE ts < ?`, cutoff.Unix())
 	if err != nil {

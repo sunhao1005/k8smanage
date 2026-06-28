@@ -16,7 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 	require.Equal(t, ":8080", c.Addr)
 	require.Equal(t, 15, c.IntervalSec)
 	require.Equal(t, "/tmp/x.db", c.DBPath)
-	require.Equal(t, 7*24*3600, c.RetentionSec)
+	require.Equal(t, 30*24*3600, c.RetentionSec)
 	require.Equal(t, "/", c.HostRoot) // 评审 N3/#3：宿主盘挂载点，默认 "/"
 }
 

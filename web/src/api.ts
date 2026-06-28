@@ -61,6 +61,8 @@ export const API = {
   overview: (): Promise<Overview> => req('/overview'),
   workloads: (ns = ''): Promise<Workload[]> => req('/workloads' + (ns ? `?ns=${encodeURIComponent(ns)}` : '')),
   pods: (ns = ''): Promise<Pod[]> => req('/pods' + (ns ? `?ns=${encodeURIComponent(ns)}` : '')),
+  traffic: (kind: string, target: string, from?: number, to?: number): Promise<{ rx: number; tx: number }> =>
+    req(`/metrics/traffic?kind=${kind}&target=${encodeURIComponent(target)}` + (from ? `&from=${from}` : '') + (to ? `&to=${to}` : '')),
   query: (kind: string, target: string, metric: string, from?: number, to?: number): Promise<Point[]> =>
     req(`/metrics/query?kind=${kind}&target=${encodeURIComponent(target)}&metric=${metric}` +
       (from ? `&from=${from}` : '') + (to ? `&to=${to}` : '')),

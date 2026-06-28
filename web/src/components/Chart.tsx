@@ -16,7 +16,9 @@ export default function Chart({
 
   const ys = data[1] || []
   const cur = ys.length ? ys[ys.length - 1] : null
-  const curLabel = cur == null ? '—' : fmt ? fmt(cur) : String(cur)
+  const peak = ys.length ? Math.max(...ys) : null
+  const avg = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : null
+  const f = (v: number | null) => (v == null ? '—' : fmt ? fmt(v) : String(v))
 
   useEffect(() => {
     if (!ref.current) return
@@ -45,12 +47,20 @@ export default function Chart({
         },
       ],
       axes: [
-        { stroke: '#c9cdd4', grid: { show: false }, ticks: { show: false }, size: 28 },
+        // X 轴：只显示「时:分」，去掉 uPlot 默认会在底部多出的日期行
         {
-          stroke: '#c9cdd4', size: 46,
-          grid: { stroke: '#f0f1f3', width: 1 },
+          stroke: '#c9cdd4', grid: { show: false }, ticks: { show: false }, size: 26,
+          values: (_u: any, splits: number[]) => splits.map((ts) => {
+            const d = new Date(ts * 1000)
+            return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+          }),
+        },
+        // Y 轴：仅保留淡横向网格，不显示刻度标签（当前值已在右上角，避免小数值都显示成 0.00）
+        {
+          size: 6, stroke: 'transparent',
+          grid: { stroke: '#f2f3f5', width: 1 },
           ticks: { show: false },
-          values: (_: any, vals: number[]) => vals.map((v) => (fmt ? fmt(v) : String(v))),
+          values: (_u: any, splits: number[]) => splits.map(() => ''),
         },
       ],
     }
@@ -67,9 +77,13 @@ export default function Chart({
     <div className="chart-box">
       <div className="chart-head">
         <span className="chart-title">{title || label}</span>
-        <span className="chart-cur">{curLabel}</span>
       </div>
       <div ref={ref} />
+      <div className="chart-stats">
+        <span>当前 <b>{f(cur)}</b></span>
+        <span>均值 <b>{f(avg)}</b></span>
+        <span>峰值 <b>{f(peak)}</b></span>
+      </div>
     </div>
   )
 }

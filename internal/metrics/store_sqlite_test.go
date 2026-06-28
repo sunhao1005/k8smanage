@@ -80,6 +80,28 @@ func TestSQLiteQueryNetRate(t *testing.T) {
 	require.InDelta(t, 0.0, pts[2].Value, 1e-9)   // 计数器重启 → 0，不出现负值
 }
 
+func TestSQLiteTrafficTotal(t *testing.T) {
+	ctx := context.Background()
+	s, _ := NewSQLiteStore(":memory:")
+	defer s.Close()
+
+	base := time.Unix(1_700_000_000, 0)
+	// net_rx 累计: 0→1000→3000→(重启)0→500 ; net_tx: 0→100→300→(重启)0→50
+	require.NoError(t, s.Write(ctx, []Sample{
+		{Kind: TargetNode, Target: "n1", TS: base, NetRx: 0, NetTx: 0},
+		{Kind: TargetNode, Target: "n1", TS: base.Add(15 * time.Second), NetRx: 1000, NetTx: 100},
+		{Kind: TargetNode, Target: "n1", TS: base.Add(30 * time.Second), NetRx: 3000, NetTx: 300},
+		{Kind: TargetNode, Target: "n1", TS: base.Add(45 * time.Second), NetRx: 0, NetTx: 0}, // 计数器重启
+		{Kind: TargetNode, Target: "n1", TS: base.Add(60 * time.Second), NetRx: 500, NetTx: 50},
+	}))
+
+	rx, tx, err := s.TrafficTotal(ctx, TargetNode, "n1", base.Add(-time.Minute), base.Add(time.Minute))
+	require.NoError(t, err)
+	// 正增量累加：rx = 1000 + 2000 + 500 = 3500（重启那段-3000不计）
+	require.Equal(t, uint64(3500), rx)
+	require.Equal(t, uint64(350), tx) // 100 + 200 + 50
+}
+
 func TestSQLiteQueryUnknownMetric(t *testing.T) {
 	s, _ := NewSQLiteStore(":memory:")
 	defer s.Close()

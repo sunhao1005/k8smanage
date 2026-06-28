@@ -64,6 +64,37 @@ func (s *server) handleMetricsQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pts)
 }
 
+// handleTraffic 统计某 target 在 [from,to] 的累计网络流量（字节）。
+// 参数：kind=node|pod, target, from, to（unix 秒，可省，默认近 30 天）。
+func (s *server) handleTraffic(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	var kind metrics.TargetKind
+	switch q.Get("kind") {
+	case "node":
+		kind = metrics.TargetNode
+	case "pod":
+		kind = metrics.TargetPod
+	default:
+		writeErr(w, http.StatusBadRequest, "kind 必须为 node 或 pod")
+		return
+	}
+	target := q.Get("target")
+	if target == "" {
+		writeErr(w, http.StatusBadRequest, "缺少 target")
+		return
+	}
+	now := time.Now()
+	to := parseUnix(q.Get("to"), now)
+	from := parseUnix(q.Get("from"), to.Add(-30*24*time.Hour))
+
+	rx, tx, err := s.d.Store.TrafficTotal(r.Context(), kind, target, from, to)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]uint64{"rx": rx, "tx": tx})
+}
+
 func parseUnix(s string, def time.Time) time.Time {
 	if s == "" {
 		return def

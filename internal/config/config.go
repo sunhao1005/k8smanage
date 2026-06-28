@@ -30,7 +30,7 @@ func Load() Config {
 	return Config{
 		Addr:            env("K8SM_ADDR", ":8080"),
 		IntervalSec:     envInt("K8SM_INTERVAL_SEC", 15),
-		RetentionSec:    envInt("K8SM_RETENTION_SEC", 7*24*3600),
+		RetentionSec:    envInt("K8SM_RETENTION_SEC", 30*24*3600), // 默认保留 30 天（看月度流量）
 		DBPath:          env("K8SM_DB_PATH", "/data/k8smanage.db"),
 		HostRoot:        env("K8SM_HOST_ROOT", "/"),
 		NodeName:        env("NODE_NAME", ""),

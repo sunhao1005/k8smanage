@@ -6,11 +6,12 @@
 
 > 状态：**M1–M5 全部完成，已在真 k3s（单节点 Docker `rancher/k3s`）上端到端验证**。完整计划见 [docs/superpowers/plans/2026-06-27-k8smanage.md](docs/superpowers/plans/2026-06-27-k8smanage.md)。
 >
-> 公开镜像：**`docker pull 17719317036/k8smanage:v0.4.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)）
+> 公开镜像：**`docker pull 17719317036/k8smanage:v0.5.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)）
 
 ## 功能一览
 
-- **监控**：节点 CPU/内存/磁盘/网络/负载 + Pod CPU/内存，历史曲线（环形存储），Web 控制台总览大盘。
+- **监控**：节点 CPU/内存/磁盘/网络/负载 + Pod CPU/内存，历史曲线（环形存储，默认留 30 天），Web 控制台总览大盘。
+- **流量统计**：节点网络**消耗总量**（上行/下行累计），支持今日 / 近 7 天 / 近 30 天，适合带宽配额受限的服务器。
 - **管理**：工作负载扩缩容、滚动重启、**暂停/启用**（缩到 0 / 恢复原副本数）、删 Pod，实时日志流，浏览器内容器终端（TTY）。
 - **告警**：阈值规则（持续时长、匹配单个或全部目标）、状态机（pending→firing→恢复）、webhook 通知（飞书/钉钉/通用 JSON）。
 - **控制台**：自建 React SPA（总览 / 工作负载 / 日志 / 终端 / 告警），embed 进同一个二进制。
@@ -85,7 +86,7 @@ docker build -f deploy/Dockerfile -t k8smanage:latest .
 ```
 
 > 也可直接用已发布的预构建镜像（无需自己构建）：
-> **`docker pull 17719317036/k8smanage:v0.4.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)，公开）。
+> **`docker pull 17719317036/k8smanage:v0.5.0`**（[Docker Hub](https://hub.docker.com/r/17719317036/k8smanage)，公开）。
 
 ## 本地运行
 
@@ -107,7 +108,7 @@ KUBECONFIG=/path/to/k3s.yaml K8SM_DB_PATH=./k8sm.db go run ./cmd/server
 ```bash
 # 1) 准备镜像，二选一：
 #  a) 直接用已发布的公开镜像（推荐，最省事）：
-#     把 deploy/k8smanage.yaml 里的 image 改成 17719317036/k8smanage:v0.4.0 即可，k3s 会自动拉取
+#     把 deploy/k8smanage.yaml 里的 image 改成 17719317036/k8smanage:v0.5.0 即可，k3s 会自动拉取
 #  b) 或本地构建并导入 k3s（无镜像仓库时）：
 docker build -f deploy/Dockerfile -t k8smanage:latest .
 docker save k8smanage:latest | sudo k3s ctr images import -
@@ -137,7 +138,7 @@ K8SM_AUTH_PASS='你的密码' docker compose up -d --build
 # 浏览器打开 http://<服务器IP>:8080 ，用 admin / 你的密码 登录
 ```
 
-> 想跳过本地构建，把 [docker-compose.yml](docker-compose.yml) 里的 `build:` 删掉、`image:` 改成 `17719317036/k8smanage:v0.4.0`，直接拉公开镜像跑。
+> 想跳过本地构建，把 [docker-compose.yml](docker-compose.yml) 里的 `build:` 删掉、`image:` 改成 `17719317036/k8smanage:v0.5.0`，直接拉公开镜像跑。
 
 [docker-compose.yml](docker-compose.yml) 用 `network_mode: host` 直连本机 k3s 的 `127.0.0.1:6443`，挂 `/etc/rancher/k3s/k3s.yaml` 作 kubeconfig、挂宿主 `/proc`·`/sys`·`/` 采集指标、SQLite 落到 `./data/`。仅适用于 Linux 主机。
 
@@ -183,7 +184,7 @@ spec:
 |---|---|---|
 | `K8SM_ADDR` | `:8080` | HTTP 监听地址 |
 | `K8SM_INTERVAL_SEC` | `15` | 采集间隔（秒） |
-| `K8SM_RETENTION_SEC` | `604800` | 样本保留时长（默认 7 天） |
+| `K8SM_RETENTION_SEC` | `2592000` | 样本保留时长（默认 30 天，便于看月度流量） |
 | `K8SM_DB_PATH` | `/data/k8smanage.db` | SQLite 路径，须落在**可写卷**上 |
 | `K8SM_HOST_ROOT` | `/` | 宿主根分区在容器内的挂载点（磁盘采集用） |
 | `K8SM_AUTH_USER` | 空 | 登录用户名（与 `K8SM_AUTH_PASS` 同时设置即启用账号密码登录） |
@@ -208,6 +209,7 @@ spec:
 | GET | `/api/nodes` | 节点列表（就绪态 / 角色 / kubelet 版本） |
 | GET | `/api/workloads?ns=` | 工作负载列表（Deployment/StatefulSet/DaemonSet，含副本就绪数） |
 | GET | `/api/metrics/query?kind=&target=&metric=&from=&to=&step=` | 时序点；`metric ∈ {cpu,mem,disk,net_rx,net_tx,load1}`（`net_rx`/`net_tx` 返回**速率 字节/秒**，已从累计计数器换算并处理重置），时间为 unix 秒、可省（默认近 1 小时）；区间过长时**自动按桶降采样**（≤500 点），可用 `step`（秒）显式指定桶大小 |
+| GET | `/api/metrics/traffic?kind=&target=&from=&to=` | 累计**网络流量消耗**（字节）：返回 `{rx, tx}`（下行/上行），对计数器正增量求和、处理重启；时间可省（默认近 30 天） |
 | POST | `/api/workloads/{ns}/{kind}/{name}/scale` | 扩缩容，body `{"replicas":N}` |
 | POST | `/api/workloads/{ns}/{kind}/{name}/restart` | 滚动重启（等价 rollout restart） |
 | POST | `/api/workloads/{ns}/{kind}/{name}/pause` | 暂停：记下原副本数到注解并缩到 0（仅 Deployment/StatefulSet） |

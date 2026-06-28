@@ -102,6 +102,7 @@ func newAppRouter(d Deps, base string) http.Handler {
 			r.Get("/workloads", s.handleWorkloads)
 			r.Get("/pods", s.handlePods)
 			r.Get("/metrics/query", s.handleMetricsQuery)
+			r.Get("/metrics/traffic", s.handleTraffic)
 
 			// 写操作（M3）
 			r.Post("/workloads/{ns}/{kind}/{name}/scale", s.handleScale)
